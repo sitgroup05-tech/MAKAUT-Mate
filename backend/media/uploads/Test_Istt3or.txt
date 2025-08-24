@@ -1,0 +1,11 @@
+IoT stands for Internet of Things — a network of physical objects ("things") that are embedded with sensors, software, and other technologies so they can collect, send, and receive data over the internet.
+
+These “things” can be anything:
+
+Everyday devices — smartwatches, thermostats, light bulbs, refrigerators
+
+Industrial machines — manufacturing robots, energy meters, connected vehicles
+
+Environmental sensors — weather stations, pollution monitors, agricultural moisture sensors
+
+Key idea: IoT connects the physical world to the digital world so devices can work autonomously and exchange data without requiring direct human input every time.

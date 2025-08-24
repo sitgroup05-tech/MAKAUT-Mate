@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Home | EduInstitute{% endblock %}
+
+{% block content %}
+
+<div class="container px-3 my-4 col-lg-5">
+  <form action="/" 
+        class="container py-2 mx-auto align-items-center justify-content-between" 
+        method="get"
+  >
+    {% csrf_token %}
+
+      {{ search.context.label }}
+      {{ search.context }}
+    
+     <button type="submit" class="btn btn-success mx-1 my-auto px-2 rounded-circle">Go</button>
+  </form>
+</div>
+
+ <!-- Don't use it now not fully correct -->
+{% if result.have_matches  %}
+  <div class="col-md-6">
+    <h3 class="mb-3">Related Files</h3>
+    <ul class="list-group">
+      {% for file in result.files %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <div>
+            <strong>{{ file.name }}</strong> ({{ file.email }})<br>
+            <small>Uploaded: {{ file.uploaded_at|date:"M d, Y H:i" }}</small>
+          </div>
+          <a href="{{ file.file.url }}" class="btn btn-sm btn-primary" target="_blank">View</a>
+        </li>
+      {% empty %}
+        <li class="list-group-item">No files Found.</li>
+      {% endfor %}
+    </ul>
+  </div>
+{% endif %}  
+
+<div class="row container-sm h-100 ">
+  
+  <!-- Left: Uploaded Files -->
+  <div class="col-md-6">
+    <h3 class="mb-3">Uploaded Files</h3>
+    <ul class="list-group">
+      {% for file in files %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <div>
+            <strong>{{ file.name }}</strong> ({{ file.email }})<br>
+            <small>Uploaded: {{ file.uploaded_at|date:"M d, Y H:i" }}</small>
+          </div>
+          <a href="{{ file.file.url }}" class="btn btn-sm btn-primary" target="_blank">View</a>
+        </li>
+      {% empty %}
+        <li class="list-group-item">No files uploaded yet.</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <!-- Right: Upload Form -->
+  <div class="col-md-6">
+    <h3 class="mb-3">Upload a File</h3>
+    <form method="POST" enctype="multipart/form-data" class="card p-3 shadow-sm">
+      {% csrf_token %}
+      <div class="mb-3">
+        {{ form.name.label_tag }}
+        {{ form.name }}
+      </div>
+      <div class="mb-3">
+        {{ form.email.label_tag }}
+        {{ form.email }}
+      </div>
+      <div class="mb-3">
+        {{ form.file.label_tag }}
+        {{ form.file }}
+      </div>
+      <button type="submit" class="btn btn-success">Upload</button>
+    </form>
+  </div>
+
+</div>
+{% endblock %}
