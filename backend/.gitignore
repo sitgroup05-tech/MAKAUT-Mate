@@ -9,6 +9,8 @@ wheels/
 # Virtual environments
 .venv
 
+# just uploaded images
+media/
 
 # some helper website ( TODO:: remove this before uploading )
 links
