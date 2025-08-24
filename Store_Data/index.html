@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document to Vector DB Uploader</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .db-entry {
+            transition: all 0.3s ease;
+        }
+        .db-entry:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-4xl">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-900">📄 Document Vectorizer</h1>
+            <p class="text-gray-600 mt-2">Upload PDF, TXT, or Image files to extract text and store it in a simulated vector database.</p>
+        </header>
+
+        <main>
+            <!-- File Upload Section -->
+            <div id="upload-container" class="bg-white p-6 rounded-lg shadow-md border-2 border-dashed border-gray-300 hover:border-blue-500 transition-colors duration-300">
+                <div class="flex flex-col items-center justify-center">
+                    <svg class="w-12 h-12 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                    <p class="text-lg text-gray-700 font-semibold mb-2">Drag & Drop your file here</p>
+                    <p class="text-gray-500">or</p>
+                    <input type="file" id="file-input" class="hidden" accept=".pdf,.txt,.jpg,.jpeg,.png">
+                    <button id="browse-btn" class="mt-3 bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors">
+                        Browse File
+                    </button>
+                </div>
+            </div>
+
+            <!-- Status and Progress Section -->
+            <div id="status-section" class="mt-6 text-center hidden">
+                <div id="spinner" class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
+                <p id="status-message" class="text-gray-700 font-medium"></p>
+                <div class="w-full bg-gray-200 rounded-full h-2.5 mt-3">
+                    <div id="progress-bar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- Vector DB Display Section -->
+            <div id="db-display-container" class="mt-10">
+                <h2 class="text-2xl font-bold text-gray-900 mb-4 flex items-center">
+                    <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4M4 7v4c0 2.21 3.582 4 8 4s8-1.79 8-4V7"></path></svg>
+                    Vector DB: <span class="ml-2 font-mono bg-gray-200 text-gray-700 px-2 py-1 rounded">questionpapers</span>
+                    <button id="clear-db-btn" class="ml-auto bg-red-500 text-white font-bold py-1 px-3 rounded-lg text-sm hover:bg-red-600 transition-colors">Clear DB</button>
+                </h2>
+                <div id="db-content" class="bg-white p-4 rounded-lg shadow-inner max-h-96 overflow-y-auto space-y-3">
+                    <p id="db-placeholder" class="text-gray-500 text-center py-4">Database is empty. Upload a file to begin.</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // --- DOM Element References ---
+        const fileInput = document.getElementById('file-input');
+        const browseBtn = document.getElementById('browse-btn');
+        const uploadContainer = document.getElementById('upload-container');
+        const statusSection = document.getElementById('status-section');
+        const statusMessage = document.getElementById('status-message');
+        const progressBar = document.getElementById('progress-bar');
+        const dbContent = document.getElementById('db-content');
+        const dbPlaceholder = document.getElementById('db-placeholder');
+        const clearDbBtn = document.getElementById('clear-db-btn');
+
+        // --- Configuration ---
+        const DB_NAME = 'questionpapers';
+        const EMBEDDING_DIMENSION = 384; // Simulate a common embedding size
+
+        // --- PDF.js Worker Configuration ---
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js`;
+
+        // --- Event Listeners ---
+        browseBtn.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => handleFileUpload(e.target.files[0]));
+
+        // Drag and Drop Listeners
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            uploadContainer.addEventListener(eventName, preventDefaults, false);
+        });
+        ['dragenter', 'dragover'].forEach(eventName => {
+            uploadContainer.addEventListener(eventName, () => uploadContainer.classList.add('border-blue-500', 'bg-blue-50'), false);
+        });
+        ['dragleave', 'drop'].forEach(eventName => {
+            uploadContainer.addEventListener(eventName, () => uploadContainer.classList.remove('border-blue-500', 'bg-blue-50'), false);
+        });
+        uploadContainer.addEventListener('drop', (e) => handleFileUpload(e.dataTransfer.files[0]), false);
+        
+        clearDbBtn.addEventListener('click', clearVectorDB);
+
+        // --- Core Application Logic ---
+
+        /**
+         * Main handler for file processing pipeline.
+         * @param {File} file The file uploaded by the user.
+         */
+        async function handleFileUpload(file) {
+            if (!file) return;
+
+            resetUI();
+            statusSection.classList.remove('hidden');
+
+            try {
+                // 1. Extract Text
+                updateStatus('Step 1: Extracting text from file...', 10);
+                const text = await extractTextFromFile(file);
+                if (!text || text.trim().length === 0) {
+                    throw new Error("File processed, but no text content was found.");
+                }
+
+                // 2. Chunk Text
+                updateStatus('Step 2: Splitting text into chunks...', 80);
+                const chunks = chunkText(text);
+
+                // 3. Generate Embeddings (Simulated)
+                updateStatus('Step 3: Generating vector embeddings...', 90);
+                const embeddings = await generateEmbeddings(chunks);
+
+                // 4. Store in Vector DB
+                updateStatus('Step 4: Storing data in vector database...', 95);
+                storeInVectorDB(embeddings);
+
+                updateStatus('Processing complete!', 100);
+                setTimeout(resetUI, 2000);
+            } catch (error) {
+                console.error("Processing Error:", error);
+                updateStatus(`Error: ${error.message}`, 100, true);
+            } finally {
+                renderDBContent();
+                fileInput.value = ''; // Reset file input
+            }
+        }
+
+        /**
+         * Extracts text content based on file type.
+         * @param {File} file The file object.
+         * @returns {Promise<string>} The extracted text.
+         */
+        async function extractTextFromFile(file) {
+            const fileType = file.type;
+            if (fileType === 'application/pdf') {
+                return extractTextFromPDF(file);
+            } else if (fileType === 'text/plain') {
+                return file.text();
+            } else if (fileType.startsWith('image/')) {
+                return extractTextFromImage(file);
+            } else {
+                throw new Error(`Unsupported file type: ${fileType}`);
+            }
+        }
+
+        /**
+         * Reusable OCR function for base64 image data.
+         * @param {string} base64ImageData The base64 encoded image data.
+         * @param {string} mimeType The mime type of the image (e.g., 'image/png').
+         * @returns {Promise<string>} The extracted text.
+         */
+        async function performOcrOnBase64(base64ImageData, mimeType) {
+            const prompt = "Extract all text from this image. Provide only the text content.";
+            const payload = {
+                contents: [{
+                    parts: [
+                        { text: prompt },
+                        { inlineData: { mimeType: mimeType, data: base64ImageData } }
+                    ]
+                }],
+            };
+            
+            const apiKey = API_KEY; // Handled by the environment
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    const errorBody = await response.json();
+                    throw new Error(`API Error: ${errorBody.error.message}`);
+                }
+
+                const result = await response.json();
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    return result.candidates[0].content.parts[0].text;
+                } else {
+                    console.warn("No text found on this page/image by the model.");
+                    return ""; // Return empty string if nothing is found on a page
+                }
+            } catch (error) {
+                console.error("Gemini API call failed:", error);
+                throw new Error("Failed to get text from image via Gemini API.");
+            }
+        }
+
+        /**
+         * Extracts text from an image file by calling the OCR function.
+         * @param {File} imageFile The image file.
+         * @returns {Promise<string>} The text extracted from the image.
+         */
+        async function extractTextFromImage(imageFile) {
+            const base64ImageData = await fileToBase64(imageFile);
+            const text = await performOcrOnBase64(base64ImageData, imageFile.type);
+            if (text.trim().length === 0) {
+                throw new Error("No text found in the image by the model.");
+            }
+            return text;
+        }
+
+        /**
+         * Extracts text from a PDF, falling back to OCR if no text layer is found.
+         * @param {File} pdfFile The PDF file.
+         * @returns {Promise<string>} The extracted text.
+         */
+        async function extractTextFromPDF(pdfFile) {
+            const arrayBuffer = await pdfFile.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+            let fullText = '';
+
+            // First, try to extract the text layer
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                fullText += textContent.items.map(item => item.str).join(' ') + '\n';
+            }
+            
+            // If a text layer exists and has content, return it
+            if (fullText.trim().length > 0) {
+                console.log("Found text layer in PDF.");
+                return fullText;
+            }
+
+            // **FIX**: If no text layer, perform OCR on each page
+            console.log("No text layer found. Attempting OCR on PDF pages.");
+            let ocrText = '';
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const viewport = page.getViewport({ scale: 2.0 }); // Higher scale for better OCR
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+
+                await page.render({ canvasContext: context, viewport: viewport }).promise;
+                
+                const imageDataUrl = canvas.toDataURL('image/png');
+                const base64ImageData = imageDataUrl.split(',')[1];
+                
+                const progress = 10 + (70 * (i / pdf.numPages));
+                updateStatus(`Performing OCR on page ${i} of ${pdf.numPages}...`, progress);
+
+                const pageText = await performOcrOnBase64(base64ImageData, 'image/png');
+                ocrText += pageText + '\n';
+            }
+
+            if (ocrText.trim().length === 0) {
+                throw new Error("OCR attempt on PDF failed to find any text.");
+            }
+
+            return ocrText;
+        }
+
+        /**
+         * Splits a long string of text into smaller chunks.
+         * @param {string} text The full text to chunk.
+         * @returns {string[]} An array of text chunks.
+         */
+        function chunkText(text) {
+            // A simple strategy: split by sentences.
+            return text.match(/[^.!?]+[.!?]+/g) || [text];
+        }
+
+        /**
+         * Simulates generating vector embeddings for text chunks.
+         * @param {string[]} chunks An array of text chunks.
+         * @returns {Promise<object[]>} An array of objects, each with text and a simulated vector.
+         */
+        async function generateEmbeddings(chunks) {
+            return chunks.map((chunk, index) => {
+                const vector = Array.from({ length: EMBEDDING_DIMENSION }, () => Math.random() * 2 - 1);
+                return {
+                    id: `${Date.now()}-${index}`,
+                    text: chunk.trim(),
+                    vector: vector
+                };
+            });
+        }
+
+        /**
+         * Stores the generated embeddings in the simulated vector DB (sessionStorage).
+         * @param {object[]} embeddings An array of embedding objects.
+         */
+        function storeInVectorDB(embeddings) {
+            const db = getVectorDB();
+            const updatedDB = db.concat(embeddings);
+            sessionStorage.setItem(DB_NAME, JSON.stringify(updatedDB));
+        }
+        
+        function clearVectorDB() {
+            sessionStorage.removeItem(DB_NAME);
+            renderDBContent();
+        }
+
+        function getVectorDB() {
+            return JSON.parse(sessionStorage.getItem(DB_NAME)) || [];
+        }
+
+        // --- UI and Helper Functions ---
+        function updateStatus(message, progress, isError = false) {
+            statusMessage.textContent = message;
+            progressBar.style.width = `${progress}%`;
+            if (isError) {
+                statusMessage.classList.add('text-red-600', 'font-bold');
+                progressBar.classList.add('bg-red-500');
+                progressBar.classList.remove('bg-blue-600');
+            } else {
+                statusMessage.classList.remove('text-red-600', 'font-bold');
+                progressBar.classList.remove('bg-red-500');
+                progressBar.classList.add('bg-blue-600');
+            }
+        }
+
+        function renderDBContent() {
+            const db = getVectorDB();
+            dbContent.innerHTML = '';
+
+            if (db.length === 0) {
+                dbContent.appendChild(dbPlaceholder);
+            } else {
+                db.forEach(entry => {
+                    const div = document.createElement('div');
+                    div.className = 'db-entry bg-gray-50 p-3 rounded-md border border-gray-200';
+                    div.innerHTML = `
+                        <p class="text-sm text-gray-800">${entry.text}</p>
+                        <p class="text-xs text-gray-500 mt-2 font-mono">ID: ${entry.id} | Vector Dim: ${entry.vector.length}</p>
+                    `;
+                    dbContent.appendChild(div);
+                });
+            }
+        }
+
+        function resetUI() {
+            statusSection.classList.add('hidden');
+            updateStatus('', 0);
+        }
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = error => reject(error);
+            });
+        }
+
+        // Initial render on page load
+        renderDBContent();
+    </script>
+</body>
+</html>
